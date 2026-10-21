@@ -1,0 +1,53 @@
+name: Build AOD OS ISO
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-iso:
+    name: Remaster Android-x86 as AOD OS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Install ISO tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xorriso curl ca-certificates
+
+      - name: Download official Android-x86 ISO and verify it
+        shell: bash
+        run: bash scripts/download-base.sh
+
+      - name: Create AOD OS ISO
+        shell: bash
+        run: bash scripts/remaster.sh
+
+      - name: Generate checksum and boot report
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum AOD-OS-v1.0-x86_64.iso > SHA256SUMS.txt
+          xorriso -indev AOD-OS-v1.0-x86_64.iso -report_el_torito plain > boot-report.txt 2>&1
+          grep -q 'El Torito' boot-report.txt || { echo 'No El Torito boot information found'; cat boot-report.txt; exit 1; }
+          ls -lh AOD-OS-v1.0-x86_64.iso
+          cat SHA256SUMS.txt
+
+      - name: Upload ISO as downloadable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AOD-OS-v1.0-x86_64
+          path: |
+            dist/AOD-OS-v1.0-x86_64.iso
+            dist/SHA256SUMS.txt
+            dist/boot-report.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
